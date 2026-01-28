@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Consum de Gas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 231, 235, 0.5);
+        }
+        .btn-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .invoice-detail-row {
+            background: #f8fafc;
+        }
+        #custom-modal, #password-modal { display: none; }
+        .profile-btn.active {
+            background-color: #2563eb;
+            color: white;
+            border-color: #2563eb;
+        }
+        .target-btn.active {
+            background-color: #64748b;
+            color: white;
+            border-color: #64748b;
+        }
+        .out-of-range {
+            opacity: 0.6;
+            background-color: #f1f5f9;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-slate-900">
+
+    <!-- Modal de Confirmació / Alerta -->
+    <div id="custom-modal" class="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl">
+            <h3 id="modal-title" class="text-xl font-black text-slate-800 mb-2">Confirmació</h3>
+            <p id="modal-msg" class="text-slate-500 text-sm mb-6 leading-relaxed">Estàs segur?</p>
+            <div class="flex gap-3" id="modal-buttons"></div>
+        </div>
+    </div>
+
+    <!-- Modal de Canvi de Password -->
+    <div id="password-modal" class="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl">
+            <h3 class="text-xl font-black text-slate-800 mb-2">Canviar Contrasenya</h3>
+            <p class="text-slate-500 text-sm mb-4">Introdueix la teva nova clau d'accés per aquest pis.</p>
+            <input type="password" id="new-password-input" class="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:border-blue-500 outline-none mb-4 font-bold tracking-widest text-center">
+            <div class="flex gap-3">
+                <button onclick="closePasswordModal()" class="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold">Cancel·lar</button>
+                <button onclick="confirmPasswordChange()" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold">Desar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estat de Connexió -->
+    <div id="conn-status" class="fixed top-4 right-4 z-[100] px-4 py-1.5 rounded-full text-[10px] font-bold uppercase shadow-lg bg-slate-200 text-slate-600 border border-slate-300">
+        Connectant...
+    </div>
+
+    <!-- Pantalla de Càrrega -->
+    <div id="loading-spinner" class="fixed inset-0 z-[60] flex items-center justify-center bg-white">
+        <div class="text-center p-6">
+            <div class="animate-spin rounded-full h-14 w-14 border-t-4 border-blue-600 border-r-transparent mx-auto"></div>
+            <p class="mt-4 text-slate-600 font-bold tracking-tight">Carregant dades...</p>
+        </div>
+    </div>
+
+    <!-- Login -->
+    <div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-100 hidden">
+        <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-md mx-4 border border-slate-200">
+            <div class="text-center mb-8">
+                <div class="bg-blue-600 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200 text-white">
+                    <svg class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+                </div>
+                <h1 class="text-3xl font-black text-slate-800 tracking-tight uppercase text-center">Gas Control</h1>
+                <p class="text-slate-400 text-sm mt-2 font-medium text-center">Tria el teu perfil d'usuari</p>
+            </div>
+            
+            <div class="grid grid-cols-3 gap-3 mb-6">
+                <button onclick="setLoginProfile('BAIXOS')" id="btn-BAIXOS" class="profile-btn py-3 border-2 border-slate-100 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all hover:bg-slate-50">Baixos</button>
+                <button onclick="setLoginProfile('1er')" id="btn-1er" class="profile-btn py-3 border-2 border-slate-100 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all hover:bg-slate-50">1er</button>
+                <button onclick="setLoginProfile('2on')" id="btn-2on" class="profile-btn py-3 border-2 border-slate-100 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all hover:bg-slate-50">2on</button>
+            </div>
+
+            <div class="space-y-4">
+                <input type="password" id="password-input" placeholder="Contrasenya" class="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-blue-500 outline-none text-center text-xl font-bold tracking-widest text-slate-800">
+                <button id="login-btn" onclick="handleLogin()" class="w-full bg-slate-800 hover:bg-black text-white font-bold py-4 rounded-2xl transition-all shadow-xl active:scale-95 uppercase tracking-widest">Accedir</button>
+                <p id="login-error" class="text-red-500 text-xs text-center hidden font-bold">Contrasenya incorrecta per aquest perfil</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contingut App -->
+    <div id="app-content" class="hidden container mx-auto px-4 py-8 max-w-6xl">
+        <header class="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6 border-b-2 border-slate-100 pb-8">
+            <div>
+                <h1 class="text-4xl font-black text-slate-900 tracking-tighter">Control de consum del Gas <span id="current-user-tag" class="text-blue-600"></span></h1>
+                <p class="text-slate-400 text-[10px] font-mono mt-2 uppercase tracking-widest">Dades privades de l'usuari</p>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="openPasswordModal()" class="px-6 py-3 bg-blue-50 text-blue-600 border-2 border-blue-100 rounded-2xl font-bold transition-all shadow-sm hover:bg-blue-100">Canvi Password</button>
+                <button onclick="logout()" class="px-6 py-3 bg-white border-2 border-slate-100 text-slate-500 hover:text-slate-800 rounded-2xl font-bold transition-all shadow-sm">Tancar Sessió</button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div class="lg:col-span-4 space-y-6">
+                <!-- Configuració Període -->
+                <div class="glass-card p-6 rounded-3xl border border-slate-200 shadow-xl">
+                    <h2 class="text-lg font-black text-slate-800 mb-5">Configuració Factura</h2>
+                    <div class="space-y-5">
+                        <div class="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100">
+                            <label class="block text-[10px] font-black text-slate-400 uppercase mb-2">Preu (€/m³)</label>
+                            <input type="text" id="price-per-m3" class="w-full bg-transparent text-2xl font-black text-slate-800 focus:outline-none" placeholder="0,00">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-slate-50 p-3 rounded-2xl border-2 border-slate-100">
+                                <label class="block text-[10px] font-black text-slate-400 uppercase mb-1">Inici Factura</label>
+                                <input type="date" id="factura-inicio" class="w-full bg-transparent text-xs font-bold focus:outline-none text-slate-700">
+                            </div>
+                            <div class="bg-slate-50 p-3 rounded-2xl border-2 border-slate-100">
+                                <label class="block text-[10px] font-black text-slate-400 uppercase mb-1">Final Factura</label>
+                                <input type="date" id="factura-fin" class="w-full bg-transparent text-xs font-bold focus:outline-none text-slate-700">
+                            </div>
+                        </div>
+                        <button onclick="saveConfig()" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-blue-700 transition-all uppercase text-xs tracking-widest">Desar Configuració</button>
+                    </div>
+                </div>
+
+                <!-- Estimacions Automàtiques -->
+                <div class="bg-slate-800 p-6 rounded-3xl border border-slate-700 shadow-xl text-white">
+                    <h2 class="text-sm font-black uppercase tracking-widest mb-4 opacity-60">Estimacions Cicle</h2>
+                    <div class="grid grid-cols-1 gap-3">
+                        <button onclick="createEstimation('start')" class="w-full bg-slate-700 hover:bg-slate-600 text-[11px] font-black py-3 rounded-xl transition-all border border-slate-600 flex items-center justify-between px-4">
+                            <span>Projectar 1er dia</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </button>
+                        <button onclick="createEstimation('end')" class="w-full bg-slate-700 hover:bg-slate-600 text-[11px] font-black py-3 rounded-xl transition-all border border-slate-600 flex items-center justify-between px-4">
+                            <span>Projectar últim dia</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Nova Lectura Real -->
+                <div class="bg-white p-6 rounded-3xl border-2 border-blue-100 shadow-xl">
+                    <h2 class="text-lg font-black text-slate-800 mb-5">Nova Lectura Real</h2>
+                    <label class="block text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest">Destinatari de la lectura</label>
+                    <div class="grid grid-cols-3 gap-2 mb-5">
+                        <button onclick="setTargetProfile('BAIXOS')" id="target-BAIXOS" class="target-btn py-2 border-2 border-slate-100 rounded-xl font-bold text-[9px] uppercase transition-all">Baixos</button>
+                        <button onclick="setTargetProfile('1er')" id="target-1er" class="target-btn py-2 border-2 border-slate-100 rounded-xl font-bold text-[9px] uppercase transition-all">1er</button>
+                        <button onclick="setTargetProfile('2on')" id="target-2on" class="target-btn py-2 border-2 border-slate-100 rounded-xl font-bold text-[9px] uppercase transition-all">2on</button>
+                    </div>
+
+                    <form id="entry-form" onsubmit="addEntry(event)" class="space-y-4">
+                        <input type="date" id="entry-date" required class="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-blue-400 text-slate-700">
+                        <div class="relative">
+                            <input type="text" id="entry-m3" required placeholder="0.00" class="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-2xl outline-none focus:border-blue-400 text-slate-800">
+                            <span class="absolute right-5 top-1/2 -translate-y-1/2 font-black text-slate-300">m³</span>
+                        </div>
+                        <button type="submit" class="w-full bg-slate-800 text-white font-black py-4 rounded-2xl hover:bg-black transition-all shadow-xl uppercase text-xs tracking-widest">Registrar Lectura</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Columna Dreta -->
+            <div class="lg:col-span-8 space-y-8">
+                <div class="flex flex-col gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm text-center">
+                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Consum Període</p>
+                            <h3 class="text-4xl font-black text-slate-800 tracking-tighter"><span id="total-m3">0</span> <span class="text-slate-400 text-sm font-bold">m³</span></h3>
+                        </div>
+                        <div class="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm text-center">
+                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 text-blue-500">Mitjana Real Global</p>
+                            <h3 class="text-4xl font-black text-blue-600 tracking-tighter"><span id="avg-m3">0</span> <span class="text-blue-300 text-xs font-bold uppercase">m³/d</span></h3>
+                        </div>
+                        <div class="bg-emerald-600 p-8 rounded-3xl shadow-xl text-white text-center">
+                            <p class="text-[10px] font-black uppercase tracking-widest mb-2 opacity-80 text-emerald-100">Cost Factura</p>
+                            <h3 class="text-4xl font-black tracking-tighter"><span id="est-cost">0,00</span> <span class="text-emerald-200 text-sm font-bold">€</span></h3>
+                        </div>
+                    </div>
+                    
+                    <button onclick="saveAndArchiveInvoice()" class="w-full bg-emerald-500 text-white font-black py-5 rounded-2xl hover:bg-emerald-600 transition-all uppercase text-sm tracking-widest shadow-lg shadow-emerald-200 flex items-center justify-center gap-3">
+                        Tancar Factura (Només Període)
+                    </button>
+                </div>
+
+                <div class="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm h-80">
+                    <canvas id="consumptionChart"></canvas>
+                </div>
+
+                <!-- Taula Lectures Actives -->
+                <div class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="p-6 bg-slate-50/50 border-b flex justify-between items-center">
+                        <h2 class="text-sm font-black text-slate-800 uppercase tracking-widest">Llista de Lectures de Treball</h2>
+                        <span id="entries-count" class="px-3 py-1 bg-white border rounded-full text-[10px] font-black text-slate-500 uppercase tracking-tighter">0 REGISTRES</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-50 text-[10px] font-black text-slate-400 uppercase">
+                                <tr>
+                                    <th class="px-6 py-4">Data</th>
+                                    <th class="px-4 py-4 text-center">Dies</th>
+                                    <th class="px-6 py-4">Valor (m³)</th>
+                                    <th class="px-6 py-4">Autor</th>
+                                    <th class="px-6 py-4 text-right">Acció</th>
+                                </tr>
+                            </thead>
+                            <tbody id="entries-list" class="divide-y divide-slate-50 text-sm font-bold text-slate-600"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-3xl border-2 border-slate-100 shadow-sm overflow-hidden">
+                    <div class="p-6 bg-slate-900 border-b text-white">
+                        <h2 class="text-sm font-black uppercase tracking-widest">Historial de Factures</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-100 text-[10px] font-black text-slate-400 uppercase">
+                                <tr>
+                                    <th class="px-8 py-4">Període</th>
+                                    <th class="px-4 py-4 text-center">Consum m³</th>
+                                    <th class="px-8 py-4 text-right">Import</th>
+                                    <th class="px-8 py-4 text-right">Detalls</th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoices-list" class="divide-y divide-slate-100 text-sm font-bold text-slate-600"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, deleteDoc, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCasFAAHaFgrNJFOwtFxa3y9pH-7hkY9Jc",
+            authDomain: "consumgas.firebaseapp.com",
+            projectId: "consumgas",
+            storageBucket: "consumgas.firebasestorage.app",
+            messagingSenderId: "470239174507",
+            appId: "1:470239174507:web:71f9d679fbd46ba230362e"
+        };
+
+        const appId = 'gas-tracker-v1';
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const DEFAULT_PROFILES = { 'BAIXOS': '123', '1er': '456', '2on': '789' };
+
+        let activeProfileId = null; 
+        let selectedTargetProfile = null;
+        let entries = [], invoices = [], appSettings = { price: 0, start: '', end: '', password: '' };
+        let chart = null, editingId = null, expandedInvoices = new Set();
+        let kpiData = { totalM3: 0, dailyAvg: 0, cost: 0 };
+
+        const SVG_EDIT = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+        const SVG_TRASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+        const SVG_EYE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+
+        window.setLoginProfile = (id) => {
+            activeProfileId = id;
+            document.querySelectorAll('.profile-btn').forEach(b => b.classList.remove('active'));
+            const btn = document.getElementById(`btn-${id}`);
+            if (btn) btn.classList.add('active');
+            const err = document.getElementById('login-error');
+            if (err) err.classList.add('hidden');
+        };
+
+        window.setTargetProfile = (id) => {
+            selectedTargetProfile = id;
+            document.querySelectorAll('.target-btn').forEach(b => b.classList.remove('active'));
+            const btn = document.getElementById(`target-${id}`);
+            if (btn) btn.classList.add('active');
+        };
+
+        window.handleLogin = async () => {
+            const err = document.getElementById('login-error');
+            if (!activeProfileId) {
+                if (err) {
+                    err.innerText = "Selecciona el perfil d'usuari";
+                    err.classList.remove('hidden');
+                }
+                return;
+            }
+            
+            const passEl = document.getElementById('password-input');
+            const pass = passEl ? passEl.value : '';
+            
+            const userPath = activeProfileId.toLowerCase();
+            const configRef = doc(db, 'artifacts', appId, 'users', userPath, 'config', 'settings');
+            const snap = await getDoc(configRef);
+            
+            let dbPassword = DEFAULT_PROFILES[activeProfileId];
+            if (snap.exists() && snap.data().password) {
+                dbPassword = snap.data().password;
+            }
+
+            if (pass === dbPassword) {
+                const loginScreen = document.getElementById('login-screen');
+                const appContent = document.getElementById('app-content');
+                const userTag = document.getElementById('current-user-tag');
+                if (loginScreen) loginScreen.classList.add('hidden');
+                if (appContent) appContent.classList.remove('hidden');
+                if (userTag) userTag.innerText = `(${activeProfileId})`;
+                setTargetProfile(activeProfileId);
+                loadUserData();
+            } else {
+                if (err) {
+                    err.innerText = "Contrasenya incorrecta per aquest perfil";
+                    err.classList.remove('hidden');
+                }
+            }
+        };
+
+        window.openPasswordModal = () => {
+            document.getElementById('password-modal').style.display = 'flex';
+        };
+
+        window.closePasswordModal = () => {
+            document.getElementById('password-modal').style.display = 'none';
+        };
+
+        window.confirmPasswordChange = async () => {
+            const newPass = document.getElementById('new-password-input').value;
+            if (!newPass) return;
+            
+            const userPath = activeProfileId.toLowerCase();
+            await updateDoc(doc(db, 'artifacts', appId, 'users', userPath, 'config', 'settings'), {
+                password: newPass
+            });
+            closePasswordModal();
+            showModal("Success", "Contrasenya actualitzada correctament.", [{ text: "Ok", primary: true }]);
+        };
+
+        window.logout = () => { location.reload(); };
+
+        function showModal(title, msg, buttons) {
+            const modal = document.getElementById('custom-modal');
+            const titleEl = document.getElementById('modal-title');
+            const msgEl = document.getElementById('modal-msg');
+            const buttonsEl = document.getElementById('modal-buttons');
+            if (!modal || !titleEl || !msgEl || !buttonsEl) return;
+            titleEl.innerText = title; msgEl.innerText = msg; buttonsEl.innerHTML = '';
+            buttons.forEach(btn => {
+                const b = document.createElement('button');
+                b.innerText = btn.text;
+                b.className = `flex-1 py-3 px-4 rounded-xl font-bold transition-all ${btn.primary ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`;
+                b.onclick = () => { modal.style.display = 'none'; if (btn.action) btn.action(); };
+                buttonsEl.appendChild(b);
+            });
+            modal.style.display = 'flex';
+        }
+
+        function calculateDaysExact(d1, d2) {
+            if (!d1 || !d2) return 0;
+            const [y1, m1, d1_] = d1.split('-').map(Number);
+            const [y2, m2, d2_] = d2.split('-').map(Number);
+            return Math.round((Date.UTC(y2, m2 - 1, d2_) - Date.UTC(y1, m1 - 1, d1_)) / 86400000);
+        }
+
+        onAuthStateChanged(auth, (u) => {
+            if (u) {
+                const status = document.getElementById('conn-status');
+                if (status) {
+                    status.innerText = "En línia";
+                    status.className = "fixed top-4 right-4 z-[100] px-4 py-1.5 rounded-full text-[10px] font-black uppercase shadow-lg bg-emerald-500 text-white border border-emerald-400";
+                }
+                const spinner = document.getElementById('loading-spinner');
+                const login = document.getElementById('login-screen');
+                if (spinner) spinner.classList.add('hidden');
+                if (login) login.classList.remove('hidden');
+            } else signInAnonymously(auth);
+        });
+
+        function loadUserData() {
+            if (!activeProfileId) return;
+            const userPath = activeProfileId.toLowerCase().replace(' ', '');
+            const configRef = doc(db, 'artifacts', appId, 'users', userPath, 'config', 'settings');
+            const entriesRef = collection(db, 'artifacts', appId, 'users', userPath, 'entries');
+            const invoicesRef = collection(db, 'artifacts', appId, 'users', userPath, 'invoices');
+            
+            onSnapshot(configRef, (snap) => {
+                if (snap.exists()) {
+                    appSettings = { ...appSettings, ...snap.data() };
+                    updateUIConfig();
+                } else setDoc(configRef, { ...appSettings, password: DEFAULT_PROFILES[activeProfileId] });
+            });
+            onSnapshot(entriesRef, (snap) => {
+                const raw = []; snap.forEach(d => raw.push({ id: d.id, ...d.data() }));
+                entries = raw.sort((a, b) => a.date.localeCompare(b.date));
+                updateDashboard();
+            });
+            onSnapshot(invoicesRef, (snap) => {
+                const raw = []; snap.forEach(d => raw.push({ id: d.id, ...d.data() }));
+                invoices = raw.sort((a, b) => b.end.localeCompare(a.end));
+                updateInvoicesTable();
+            });
+        }
+
+        function getRealDailyAvg() {
+            const real = entries.filter(e => e.type !== 'estimat');
+            if (real.length < 2) return 0;
+            const m3Diff = real[real.length - 1].m3 - real[0].m3;
+            const daysDiff = calculateDaysExact(real[0].date, real[real.length - 1].date);
+            return daysDiff > 0 ? m3Diff / daysDiff : 0;
+        }
+
+        window.createEstimation = async (target) => {
+            const real = entries.filter(e => e.type !== 'estimat');
+            if (real.length < 2) return;
+            const targetDateStr = target === 'start' ? appSettings.start : appSettings.end;
+            if (!targetDateStr) return;
+            const dailyAvg = getRealDailyAvg();
+            let val = 0;
+            if (target === 'start') {
+                const base = real.find(r => r.date >= targetDateStr) || real[0];
+                val = base.m3 - (calculateDaysExact(targetDateStr, base.date) * dailyAvg);
+            } else {
+                const base = [...real].reverse().find(r => r.date <= targetDateStr) || real[real.length - 1];
+                val = base.m3 + (calculateDaysExact(base.date, targetDateStr) * dailyAvg);
+            }
+            const userPath = activeProfileId.toLowerCase();
+            const existing = entries.find(e => e.date === targetDateStr);
+            const entryData = { 
+                date: targetDateStr, m3: val, type: 'estimat', timestamp: Date.now(), createdBy: 'SISTEMA' 
+            };
+            if (existing) await updateDoc(doc(db, 'artifacts', appId, 'users', userPath, 'entries', existing.id), entryData);
+            else await addDoc(collection(db, 'artifacts', appId, 'users', userPath, 'entries'), entryData);
+        };
+
+        window.saveAndArchiveInvoice = async () => {
+            if (!appSettings.start || !appSettings.end) {
+                showModal("Avis", "Falten dates per tancar la factura.", [{ text: "Ok", primary: true }]);
+                return;
+            }
+            const invoiceRange = entries.filter(e => e.date >= appSettings.start && e.date <= appSettings.end);
+            if (invoiceRange.length < 2) {
+                showModal("Avis", "Calen 2 lectures al període d'inici/final per arxivar.", [{ text: "Ok", primary: true }]);
+                return;
+            }
+            showModal("Confirmació", `S'arxivarà el període ${appSettings.start} al ${appSettings.end} (${kpiData.cost.toFixed(2)}€). Les dades fora de rang NO s'esborraran.`, [
+                { text: "No", primary: false },
+                { text: "Tancar Període", primary: true, action: async () => {
+                    const userPath = activeProfileId.toLowerCase();
+                    const invoiceData = {
+                        start: appSettings.start, end: appSettings.end, totalM3: kpiData.totalM3,
+                        dailyAvg: kpiData.dailyAvg, cost: kpiData.cost, unitPrice: appSettings.price,
+                        timestamp: Date.now(), readings: invoiceRange.map(r => ({ 
+                            date: r.date, m3: r.m3, type: r.type, createdBy: r.createdBy || 'Unknown' 
+                        }))
+                    };
+                    await addDoc(collection(db, 'artifacts', appId, 'users', userPath, 'invoices'), invoiceData);
+                    const batch = writeBatch(db);
+                    invoiceRange.forEach(r => batch.delete(doc(db, 'artifacts', appId, 'users', userPath, 'entries', r.id)));
+                    await batch.commit();
+                    await updateDoc(doc(db, 'artifacts', appId, 'users', userPath, 'config', 'settings'), { start: '', end: '' });
+                }}
+            ]);
+        };
+
+        window.toggleInvoiceDetail = (id) => {
+            if (expandedInvoices.has(id)) expandedInvoices.delete(id);
+            else expandedInvoices.add(id);
+            updateInvoicesTable();
+        };
+
+        window.deleteInvoice = async (id) => {
+            showModal("Eliminar", "Vols esborrar la factura permanentment?", [
+                { text: "No", primary: false },
+                { text: "Esborra", primary: true, action: async () => {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'users', activeProfileId.toLowerCase(), 'invoices', id));
+                }}
+            ]);
+        };
+
+        function updateUIConfig() {
+            const pInput = document.getElementById('price-per-m3');
+            if (pInput && document.activeElement !== pInput) pInput.value = (appSettings.price || 0).toString().replace('.', ',');
+            const start = document.getElementById('factura-inicio');
+            const end = document.getElementById('factura-fin');
+            if (start) start.value = appSettings.start || '';
+            if (end) end.value = appSettings.end || '';
+        }
+
+        window.addEntry = async (e) => {
+            e.preventDefault();
+            const date = document.getElementById('entry-date').value;
+            const m3 = parseFloat(document.getElementById('entry-m3').value.replace(',', '.'));
+            const targetUserPath = selectedTargetProfile.toLowerCase();
+            await addDoc(collection(db, 'artifacts', appId, 'users', targetUserPath, 'entries'), { 
+                date, m3, type: 'real', timestamp: Date.now(), createdBy: activeProfileId
+            });
+            document.getElementById('entry-form').reset();
+            document.getElementById('entry-date').value = new Date().toISOString().split('T')[0];
+            setTargetProfile(activeProfileId);
+        };
+
+        window.deleteEntry = async (id) => { 
+            await deleteDoc(doc(db, 'artifacts', appId, 'users', activeProfileId.toLowerCase(), 'entries', id)); 
+        };
+
+        window.startEdit = (id) => { editingId = id; updateDashboard(); };
+        window.cancelEdit = () => { editingId = null; updateDashboard(); };
+        window.saveEdit = async (id) => {
+            const nD = document.getElementById(`edit-date-${id}`).value;
+            const nM = parseFloat(document.getElementById(`edit-m3-${id}`).value.replace(',', '.'));
+            await updateDoc(doc(db, 'artifacts', appId, 'users', activeProfileId.toLowerCase(), 'entries', id), { date: nD, m3: nM, type: 'real' });
+            editingId = null;
+            updateDashboard();
+        };
+
+        function updateDashboard() {
+            const list = document.getElementById('entries-list');
+            if (!list) return;
+            list.innerHTML = '';
+            const realAvg = getRealDailyAvg();
+            const invoiceRange = entries.filter(e => {
+                if (!appSettings.start || !appSettings.end) return false;
+                return e.date >= appSettings.start && e.date <= appSettings.end;
+            });
+            let totalM3 = invoiceRange.length >= 2 ? invoiceRange[invoiceRange.length - 1].m3 - invoiceRange[0].m3 : 0;
+            let cost = totalM3 * (appSettings.price || 0);
+            kpiData = { totalM3, dailyAvg: realAvg, cost };
+
+            let labels = [], values = [];
+            entries.forEach((entry, index) => {
+                const row = document.createElement('tr');
+                const isInRange = appSettings.start && appSettings.end && entry.date >= appSettings.start && entry.date <= appSettings.end;
+                if (entry.type === 'estimat') row.className = 'bg-blue-50/50';
+                if (!isInRange && (appSettings.start || appSettings.end)) row.classList.add('out-of-range');
+                let days = index > 0 ? calculateDaysExact(entries[index - 1].date, entry.date) : "-";
+                let creator = entry.createdBy || 'Unknown';
+
+                if (editingId === entry.id) {
+                    row.innerHTML = `<td class="px-6 py-3"><input type="date" id="edit-date-${entry.id}" value="${entry.date}" class="border rounded px-2 py-1 w-full text-xs font-bold outline-none"></td><td class="px-4 py-3 text-center text-xs opacity-40">${days}</td><td class="px-6 py-3"><input type="text" id="edit-m3-${entry.id}" value="${entry.m3}" class="border rounded px-2 py-1 w-full text-xs font-black outline-none"></td><td class="px-6 py-3 text-xs opacity-50 font-bold uppercase">${creator}</td><td class="px-6 py-3 text-right"><button onclick="saveEdit('${entry.id}')" class="text-emerald-600 font-bold">Fet</button></td>`;
+                } else {
+                    row.innerHTML = `<td class="px-6 py-4"><span class="font-bold text-slate-700">${entry.date}</span>${entry.type === 'estimat' ? '<span class="ml-2 text-[7px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">Est</span>' : ''}</td><td class="px-4 py-4 text-slate-500 font-mono text-xs text-center">${days}</td><td class="px-6 py-4 text-slate-900 font-bold">${(entry.m3 || 0).toFixed(2).replace('.', ',')} m³</td><td class="px-6 py-4 text-[10px] text-slate-400 font-black uppercase tracking-tighter">${creator}</td><td class="px-6 py-4 text-right"><div class="flex justify-end gap-3"><button onclick="startEdit('${entry.id}')" class="btn-icon bg-slate-50 text-slate-400 hover:text-blue-600">${SVG_EDIT}</button><button onclick="deleteEntry('${entry.id}')" class="btn-icon bg-slate-50 text-slate-400 hover:text-red-500">${SVG_TRASH}</button></div></td>`;
+                }
+                list.appendChild(row);
+                labels.push(entry.date);
+                values.push(entry.m3);
+            });
+
+            if (document.getElementById('total-m3')) document.getElementById('total-m3').innerText = Math.max(0, totalM3).toFixed(1).replace('.', ',');
+            if (document.getElementById('avg-m3')) document.getElementById('avg-m3').innerText = realAvg.toFixed(3).replace('.', ',');
+            if (document.getElementById('est-cost')) document.getElementById('est-cost').innerText = cost.toFixed(2).replace('.', ',');
+            if (document.getElementById('entries-count')) document.getElementById('entries-count').innerText = `${entries.length} REGISTRES`;
+            updateChart(labels, values);
+        }
+
+        function updateInvoicesTable() {
+            const list = document.getElementById('invoices-list');
+            if (!list) return;
+            if (invoices.length === 0) {
+                list.innerHTML = '<tr><td colspan="4" class="px-8 py-10 text-center text-slate-400 italic">Sense factures arxivades.</td></tr>';
+                return;
+            }
+            list.innerHTML = '';
+            invoices.forEach(inv => {
+                const isExpanded = expandedInvoices.has(inv.id);
+                const row = document.createElement('tr');
+                row.innerHTML = `<td class="px-8 py-4 text-slate-700 font-bold">${inv.start} <span class="mx-2 text-slate-300">→</span> ${inv.end}</td><td class="px-4 py-4 text-center font-bold text-slate-600">${inv.totalM3.toFixed(1).replace('.', ',')} m³</td><td class="px-8 py-4 text-right text-emerald-600 font-black text-lg">${inv.cost.toFixed(2).replace('.', ',')} €</td><td class="px-8 py-4 text-right"><div class="flex justify-end gap-3"><button onclick="toggleInvoiceDetail('${inv.id}')" class="btn-icon ${isExpanded ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-500'} hover:bg-slate-200">${SVG_EYE}</button><button onclick="deleteInvoice('${inv.id}')" class="btn-icon bg-red-50 text-red-400 hover:text-red-600">${SVG_TRASH}</button></div></td>`;
+                list.appendChild(row);
+                if (isExpanded) {
+                    const detailRow = document.createElement('tr');
+                    detailRow.className = "invoice-detail-row";
+                    let readingsHtml = inv.readings.map((r, i) => {
+                        let d = i > 0 ? calculateDaysExact(inv.readings[i-1].date, r.date) : '-';
+                        let creator = r.createdBy || 'Unknown';
+                        return `<div class="flex justify-between border-b border-slate-200/50 py-2 px-4 text-xs font-bold"><span class="w-24 text-slate-500">${r.date}</span><span class="w-16 text-center text-slate-300 font-mono">${d} d.</span><span class="w-20 text-slate-400 uppercase text-[8px] text-center">${creator}</span><span class="w-24 text-right text-slate-700">${r.m3.toFixed(2)} m³</span><span class="w-12 text-right uppercase text-[8px] ${r.type === 'estimat' ? 'text-blue-500' : 'text-slate-200'}">${r.type.substring(0,3)}</span></div>`;
+                    }).join('');
+                    detailRow.innerHTML = `<td colspan="4" class="px-6 py-4 bg-slate-50"><div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-inner"><div class="bg-slate-100 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Detall de lectures factura</div>${readingsHtml}<div class="p-3 bg-blue-50/30 text-right text-[10px] font-bold text-slate-400 italic">Preu unitari: ${inv.unitPrice} €/m³</div></div></td>`;
+                    list.appendChild(detailRow);
+                }
+            });
+        }
+
+        function updateChart(labels, values) {
+            const canvas = document.getElementById('consumptionChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        data: values, borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.05)', 
+                        borderWidth: 4, fill: true, tension: 0.1, pointRadius: 5, pointBackgroundColor: '#fff', pointBorderColor: '#2563eb'
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        window.saveConfig = async () => {
+            const pVal = document.getElementById('price-per-m3').value.replace(',', '.');
+            await updateDoc(doc(db, 'artifacts', appId, 'users', activeProfileId.toLowerCase(), 'config', 'settings'), {
+                price: parseFloat(pVal) || 0,
+                start: document.getElementById('factura-inicio').value,
+                end: document.getElementById('factura-fin').value
+            });
+        };
+
+        const dateEl = document.getElementById('entry-date');
+        if (dateEl) dateEl.value = new Date().toISOString().split('T')[0];
+
+        // Export functions to window
+        window.toggleInvoiceDetail = toggleInvoiceDetail;
+        window.deleteInvoice = deleteInvoice;
+        window.saveAndArchiveInvoice = saveAndArchiveInvoice;
+        window.deleteEntry = deleteEntry;
+        window.startEdit = startEdit;
+        window.saveEdit = saveEdit;
+        window.cancelEdit = cancelEdit;
+        window.saveConfig = saveConfig;
+    </script>
+</body>
+</html>
